@@ -39,7 +39,8 @@ const navItems = [
 function AppShell() {
   const [authed, setAuthed] = useState<boolean>(() => !isSupabaseConfigured && readStorage(STORAGE_KEYS.auth, false))
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured)
-  const { products, customers, orders, inventory, settings, setProducts, setCustomers, setOrders, setInventory, setSettings, summary } = useLocalData()
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const { products, customers, orders, inventory, settings, setProducts, setCustomers, setOrders, setInventory, setSettings, summary, dataReady, canUseData, syncError, retrySync } = useLocalData(authed, sessionUserId)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -49,11 +50,13 @@ function AppShell() {
     supabase.auth.getSession().then(({ data }) => {
       if (active) {
         setAuthed(Boolean(data.session))
+        setSessionUserId(data.session?.user.id ?? null)
         setAuthReady(true)
       }
     })
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthed(Boolean(session))
+      setSessionUserId(session?.user.id ?? null)
       setAuthReady(true)
     })
     return () => {
@@ -133,7 +136,9 @@ function AppShell() {
           </header>
 
           <main className="min-w-0 p-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6">
-            <Suspense fallback={<div className="card p-5 text-sm text-[#d8cbb5]" role="status">Carregando...</div>}>
+            {!dataReady && <div className="card mb-4 p-4 text-sm text-[#d8cbb5]" role="status">Conectando ao banco de dados...</div>}
+            {syncError && <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#6b3434] bg-[#251616] p-4 text-sm text-[#ffd0d0]" role="alert"><span>Falha na sincronização: {syncError}</span><button type="button" onClick={retrySync} className="rounded-lg border border-[#8f5555] px-3 py-2 font-medium hover:bg-[#351c1c]">Tentar novamente</button></div>}
+            {dataReady && canUseData && <Suspense fallback={<div className="card p-5 text-sm text-[#d8cbb5]" role="status">Carregando...</div>}>
               <Routes>
                 <Route path="/" element={<DashboardPage summary={summary} products={products} orders={orders} />} />
                 <Route path="/pedidos" element={<OrdersPage orders={orders} customers={customers} products={products} setOrders={setOrders} />} />
@@ -145,7 +150,7 @@ function AppShell() {
                 <Route path="/configuracoes" element={<SettingsPage settings={settings} setSettings={setSettings} />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </Suspense>
+            </Suspense>}
           </main>
           <nav aria-label="Navegação mobile" className="mobile-nav fixed inset-x-0 bottom-0 z-50 flex w-full max-w-[100vw] overflow-x-auto border-t border-[#2a211b] bg-[#0e0d0d]/95 px-2 pt-2 backdrop-blur-lg lg:hidden">
             {navItems.map(({ to, label, icon: Icon }) => (
