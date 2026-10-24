@@ -16,7 +16,9 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: 'admin@lunaris.com.br', password: 'lunaris123' },
+    defaultValues: isSupabaseConfigured
+      ? { email: '', password: '' }
+      : { email: 'admin@lunaris.com.br', password: 'lunaris123' },
   })
 
   async function onSubmit(values: LoginFormValues) {
@@ -24,7 +26,18 @@ export function LoginPage({ onLogin }: { onLogin: () => void }) {
     if (isSupabaseConfigured && supabase) {
       const { error } = await supabase.auth.signInWithPassword({ email: values.email, password: values.password })
       if (error) {
-        setAuthError('Não foi possível entrar. Confira suas credenciais e tente novamente.')
+        const message = error.message.toLowerCase()
+        if (message.includes('email not confirmed')) {
+          setAuthError('O e-mail ainda não foi confirmado. Verifique sua caixa de entrada ou confirme o usuário em Supabase > Authentication > Users.')
+        } else if (message.includes('invalid login credentials')) {
+          setAuthError('E-mail ou senha não conferem. Use exatamente os dados do usuário criado em Supabase > Authentication > Users. Se acabou de criar a conta, confirme o e-mail antes de entrar.')
+        } else if (message.includes('invalid api key') || message.includes('apikey')) {
+          setAuthError('A chave pública configurada na Vercel parece inválida. Confira VITE_SUPABASE_ANON_KEY e faça um novo deploy.')
+        } else if (message.includes('failed to fetch') || message.includes('network')) {
+          setAuthError('Não foi possível conectar ao Supabase. Confira VITE_SUPABASE_URL, as configurações de rede e faça um novo deploy na Vercel.')
+        } else {
+          setAuthError(`Falha ao entrar: ${error.message}`)
+        }
         return
       }
     } else if (values.email !== 'admin@lunaris.com.br' || values.password !== 'lunaris123') {
